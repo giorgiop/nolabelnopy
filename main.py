@@ -17,8 +17,8 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 
 data_path = "/Users/giorgio/Google Drive/Laplacian Mean Map/dataset/"
 
-bag_strategy = 'sex'
-train_subsample = 20
+bag_strategy = 'race'
+train_subsample = 2000
 if train_subsample: print("Subsample only ", train_subsample, " examples")
 X_train, pi, y_train, X_test, y_test = preprocess_adult(data_path, train_subsample=train_subsample, bag_strategy=bag_strategy)
 
@@ -71,6 +71,11 @@ print(metrics.accuracy_score(to_one_one(y_test), model.predict(X_test)))
 
 #Laplacian Mean Map with CV
 print("LLP with Grid Search")
-alphas = np.logspace(-3,3,10)
-model = LaplacianMeanMapGridSearch(alphas=alphas)
-model = model.fit(X_train, pi)
+alphas = np.logspace(-3,3,5)
+gammas = np.logspace(-3,3,5)
+sigmas = np.logspace(-3,-3,5)
+model = LaplacianMeanMapGridSearch(alphas=alphas, gammas=gammas, sigmas=sigmas).fit(X_train, pi)
+#train validation
+print(metrics.accuracy_score(to_one_one(y_train), model.predict(X_train)))
+#test
+print(metrics.accuracy_score(to_one_one(y_test), model.predict(X_test)))

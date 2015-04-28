@@ -89,7 +89,7 @@ def preprocess_adult(data_path, train_subsample=False, bag_strategy='random',
     #Shuffle train
     np.random.seed(100)
     train_csv.index = np.random.permutation(train_csv.index)
-
+    train_csv.index = np.arange(train_csv.shape[0]) #reset index
 
     #Labels
     y_train = train_csv['income']

@@ -6,7 +6,7 @@ Created on Wed Mar 25 16:53:38 2015
 """
 
 from utils import *
-import warnings
+#import warnings
 
 #scientific libraries
 import numpy as np
@@ -102,10 +102,11 @@ class BaggedKFold(_BaseKFold):
     
     def __init__(self, bag_id, n_folds=3, indices=None, shuffle=False,
                  random_state=None):
+                         
+        n = len(np.asarray(bag_id))
         super(BaggedKFold, self).__init__(
-            len(bag_id), n_folds, indices, shuffle, random_state)
+                n, n_folds, indices, shuffle, random_state)
             
-        n_samples = bag_id.shape[0]
         unique_bag, bag_inversed = np.unique(bag_id, return_inverse=True)
         bag_sizes = np.bincount(bag_inversed)
 
@@ -129,9 +130,9 @@ class BaggedKFold(_BaseKFold):
 
         #create mapping from bag to bag_id vector (instances position)
         bag_to_x = np.array([[i for i, x in enumerate(bag_id) if x == b] for b in unique_bag])
-            
+        
 
-        test_folds = np.zeros(n_samples, dtype=np.int)
+        test_folds = np.zeros(self.n, dtype=np.int)
         for b in unique_bag:
             n_b = np.sum(bag_id == b)
             for i , (_, test_split) in enumerate(KFold(n_b, self.n_folds, 
@@ -237,19 +238,24 @@ class LaplacianMeanMapGridSearch:
                 d=['rbf'], sigmas=[1]):
         self.cv = cv
         self.alphas = alphas
+        self.L_normed = L_normed
         self.gammas = gammas
         self.w_types = w_types
         self.epsilon = epsilon
-        self.ds = d
+#       self.ds = d NOT USED SO FAR, it will list different similarity fun
         self.sigmas = sigmas
         self.theta = 0.0
 #        self.dataframe_result = pd.DataFrame()
 #        self.dataframe_result.columm = ['alpha', 'L_normed', 'gamma', 'D_w', 'eps', 
 #                                        'd', 'sigma', 'accuracy']
                                         
-    def compute_D_w(w_type='identity', p=1):
-    
-        D_w = np.identity(self.n)
+    def compute_D_w(self, w_type='identity', p=None):
+
+        n = self.n
+        if p and n != len(p):
+            raise ValueError("The vector p must be of size n, but %d != %d"
+                            .format(n, len(p)))
+        D_w = np.identity(n)
         if w_type == 'identity':
             return D_w  
         elif w_type == 'bag-size':
@@ -258,12 +264,12 @@ class LaplacianMeanMapGridSearch:
             return D_w * np.array(p)
 
 
-    def _fit(self, X, Pi, p, D_w, L, gamma, alpha):        
+    def _fit(self, X, Pi, B, p, D_w, L, gamma, alpha):
     
         #Step1 - Least Squares
         Pi_dot_Dw = np.dot(Pi,D_w)
         B_pm = sp.linalg.solve((np.dot(Pi_dot_Dw, np.transpose(Pi)) + \
-            self.gamma * L), np.dot(Pi_dot_Dw, self.B))
+            gamma * L), np.dot(Pi_dot_Dw, B))
         
         #Step 2 - Mean Operator estimation
         pi = np.diag(Pi[:,:self.n]) #get the proportion in an array
@@ -283,7 +289,7 @@ class LaplacianMeanMapGridSearch:
                                    method='L-BFGS-B')#, options={'gtol': 1e-6, 'disp': True})
         
         self.theta = res.x
-        return        
+        return
         
         
     def fit(self, X, pi):
@@ -294,7 +300,14 @@ class LaplacianMeanMapGridSearch:
         
         #precompute all bag-wise means on train-validation splits
         B = list()
-        for ix_train, ix_validation in BaggedKFold(X.shape[0], n_folds=self.cv):
+        #bag ids 
+        bag_id = X.index.get_level_values('bag')
+        
+        #keep the same object for CV below
+        random_state = 14
+        folds = BaggedKFold(bag_id, n_folds=self.cv, random_state=random_state)
+        
+        for ix_train, ix_validation in folds:
             B.append(compute_bag_means(X.iloc[ix_train]))
 
         #estimate the bag frequencies
@@ -304,9 +317,12 @@ class LaplacianMeanMapGridSearch:
         Pi = np.transpose(np.hstack((np.diag(pi), np.diag(1-pi))))
                 
         #grid search
-        opt_d, opt_sigma, opt_D_w, opt_gamma, opt_alpha = d, 0, 1, 'identity', 1, 0
-        opt_score = 0          
-        for d, sigma, L_normed in product(self.ds, self.sigmas, self.L_normed):   
+        opt_sigma, opt_D_w, opt_gamma, opt_alpha = 1, 'identity', 1, 0
+        opt_score = np.inf #we want to minimize this score
+
+        
+#       for d, sigma, L_normed in product(self.ds, self.sigmas, self.L_normed):   
+        for sigma, L_normed in product(self.sigmas, self.L_normed):   
 
             La = [ laplacian_matrix(B[i], d, normed=L_normed) for i in range(self.cv)]
             #set the block Laplacian
@@ -315,32 +331,34 @@ class LaplacianMeanMapGridSearch:
             
             for w_type in self.w_types:
                 #set weight matrix
-                D_w = compute_D_w(w_type)
+                D_w = self.compute_D_w(w_type=w_type)
 
                 for gamma, alpha in product(self.gammas, self.alphas):
                 
                     #cross validation of these params
                     score = 0
-                    bag_id = np.array(X_train.index.get_level_values('bag'))
-                    for v, idx_train, idx_validation in enumerate(BaggedKFold(bag_id, n_folds=self.cv)):
-                        
-                        self._fit(X_train[idx_train,:], Pi, p[v], D_w, L[v], g, a)
-                        score += 1/self.cv * proportions_abs_err(X, pi, p, self.predict(X_train[idx_validation,:]))
+                    for v, (idx_train, idx_validation) in enumerate(folds):
+
+                        self._fit(X.iloc[idx_train], Pi, B[v], p, D_w, L[v], gamma, alpha)
+                        score += 1/self.cv * proportions_abs_err(X, pi, p, self.predict(X.iloc[idx_validation]))
                     
-                    print("score ", score, ", opt: ", opt_d, opt_sigma, opt_D_w, opt_gamma, opt_alpha)
+                    #print("score {} - sigma: {}, D_w: {}, gamma: {}, alpha: {}"
+                    #        .format(score, sigma, w_type, gamma, alpha))
                     #check if the params improve solution
-                    if score > opt_score:
+                    if np.mean(score) < opt_score:
                         opt_score = score
-                        opt_d, opt_sigma, opt_D_w, opt_gamma, opt_alpha = \
-                        d, sigma, w_type, gamma, alpha 
+                        opt_sigma, opt_D_w, opt_gamma, opt_alpha = \
+                        sigma, w_type, gamma, alpha
                         
                         
-        #recompute L for the whole data, re-train with the opt params 
-        L_a = laplacian_matrix(compute_bag_means(X), opt_d)      
+        #recompute L for the whole data, re-train with the opt params
+        B = compute_bag_means(X)
+        L_a = laplacian_matrix(B, d)      
         L = np.identity(2*self.n) * self.epsilon + sp.linalg.block_diag(L_a, L_a)
         
-        self._fit(X, Pi, p, D_w, L, opt_g, opt_a)
+        self._fit(X, Pi, B, p, D_w, L, opt_gamma, opt_alpha)
         
+        return self
     
     def predict(self, X):
         return np.sign(sp.special.expit(2 * np.dot(X.iloc[:], self.theta)) - .5)
