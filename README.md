@@ -1,2 +1,2 @@
 # nolabelnopy
-Python implementation of code from "(Almost) no label no cry" NIPS'14
+Python implementation of algorithms from "(Almost) no label no cry" NIPS'14
