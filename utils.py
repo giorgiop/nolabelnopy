@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 @author: Giorgio Patrini <giorgio.patrini@anu.edu.au>
 """
@@ -8,14 +7,14 @@ import pandas as pd
 from sklearn import preprocessing
 
 
-def to_zero_one(label):
+def _to_zero_one(label):
     """
     Binary label transformation {-1,+1} -> {0,1}
     """
     return ((label + 1)/2).astype(np.int)
 
 
-def to_one_one(label):
+def _to_one_one(label):
     """
     binary label transformation {-1,+1} -> {0,1}
     """
@@ -24,9 +23,9 @@ def to_one_one(label):
 
 def assign_bags(X, strategy='random', n=10, random_state=int(0)):
     """
-    Simulate bags assigment with a fully labelled dataset
-    As side effect, when the method is called with stragety == "feature",
-    it also removed that feature from X
+    Simulate bags assigment with a fully labelled dataset.
+    When the method is called with stragety == "feature",
+    it also removes that feature from X.
     """
 
     if strategy == 'random':
