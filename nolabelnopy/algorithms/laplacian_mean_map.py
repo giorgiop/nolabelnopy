@@ -3,7 +3,7 @@
 @author: Giorgio Patrini <giorgio.patrini@anu.edu.au>
 """
 
-from utils import *
+from ..utils import *
 
 import numpy as np
 import scipy as sp
