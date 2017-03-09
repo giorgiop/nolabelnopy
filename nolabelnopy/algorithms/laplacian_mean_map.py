@@ -13,6 +13,7 @@ from sklearn.utils.graph import graph_laplacian
 from itertools import product
 
 from sklearn.cross_validation import _BaseKFold, KFold
+# from sklearn.model_selection import _BaseKFold, KFold
 
 
 def mean_operator(X, y):

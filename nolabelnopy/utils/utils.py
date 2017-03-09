@@ -36,7 +36,7 @@ def assign_bags(X, strategy='random', n=10, random_state=int(0)):
         if strategy not in X.columns:
             raise NameError("unknownn strategy for bags creation")
 
-        bag_id = pd.Categorical(X[strategy]).labels
+        bag_id = pd.Categorical(X[strategy]).codes
         # then, drop the features
         X = X.drop(strategy, axis=1)
 
